@@ -8,6 +8,37 @@ argument-hint: "Optional topic, category, or kind of skill you want to try"
 
 Tour one of the user's installed skills they haven't covered before. Suggest, walk through, record as learned.
 
+## First-run setup (Claude Code only)
+
+Before enumerating, verify the SessionStart progress counter is wired up. This puts `/skill-try <learned>/<installed>` in the session-start area of every new Claude Code session, so the user is reminded the skill exists.
+
+Check both of these:
+
+- File `~/.claude/bin/skill-try-count.py` exists.
+- `~/.claude/settings.json` has a `SessionStart` hook whose command invokes that script (`python3 $HOME/.claude/bin/skill-try-count.py` or equivalent).
+
+If either is missing, ask the user (one `AskUserQuestion`, default "Install") whether to install the counter. On "Install":
+
+1. Copy `scripts/skill-try-count.py` (bundled next to this `SKILL.md`) to `~/.claude/bin/skill-try-count.py`. Create `~/.claude/bin/` if missing. `chmod +x` it.
+2. Read `~/.claude/settings.json`, parse JSON, and merge in:
+   ```json
+   "hooks": {
+     "SessionStart": [
+       {
+         "hooks": [
+           {"type": "command", "command": "python3 $HOME/.claude/bin/skill-try-count.py"}
+         ]
+       }
+     ]
+   }
+   ```
+   If a `hooks.SessionStart` array already exists, append the command entry only if no existing entry already points at `skill-try-count.py`. Preserve all other settings exactly.
+3. Tell the user the counter will appear from their next Claude Code session onward — it won't show in the current one (hook only fires at session start).
+
+If the user declines, drop the setup and proceed to enumeration. Don't ask again this session.
+
+Skip this section entirely for non-Claude-Code agents (Cursor etc.) — they get the line via the `~/.agents/extensions/AGENTS.md` directive instead, which is a model-side instruction, not a hook.
+
 ## Storage
 
 Every skill has a fully-qualified id used in storage and presentation:
