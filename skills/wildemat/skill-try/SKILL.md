@@ -58,32 +58,42 @@ Sources:
 
 ## Process
 
-### 1. Enumerate
+### 1. Enumerate (single call)
 
-- Build the local set from `~/.claude/skills/`.
-- Build the plugin set from each enabled plugin's `installPath/skills/`.
-- For each skill, read frontmatter `name` and `description` (fall back to dir name if missing).
-- Load the learned record. Candidate set = installed minus learned (by id).
+Run the bundled list script in **one** Bash call — do not stack `ls`, `head`, or per-skill greps:
+
+```
+python3 ~/.claude/skills/skill-try/scripts/skill-try-list.py
+```
+
+It returns JSON with `installed`, `learned`, `candidates`, and `counts`. Each skill entry has `id`, `name`, `description`, `source`, `path`, and (for plugin skills) `marketplace`. Use `candidates` directly — it's installed minus learned, already filtered.
+
+Do NOT re-enumerate by hand. The script handles local skills, plugin skills via `~/.claude/plugins/installed_plugins.json`, frontmatter parsing (including folded YAML descriptions), and learned-record filtering in a single pass.
 
 ### 2. Handle the argument
 
 `$ARGUMENTS` may be empty, a topic ("testing", "writing"), a category, a fuzzy phrase, or an exact skill id.
 
-- **Empty** — pick ~5 candidates at random, biased for variety: mix local and plugin sources, and spread across plugins/buckets when possible.
+- **Empty** — pick exactly **4** candidates at random, biased for variety: mix local and plugin sources, and spread across plugins when possible.
 - **Exact id match** on a candidate (`handoff`, `figma:figma-use`) — skip suggestion, go straight to step 4.
-- **Otherwise** — semantic match `$ARGUMENTS` against each candidate's name + description + source. Pick top 3–5. Source counts as signal: "figma" should rank figma skills high.
+- **Otherwise** — semantic match `$ARGUMENTS` against each candidate's name + description + source. Pick the top **4**. Source counts as signal: "figma" should rank figma skills high.
+
+Cap at 4 (never more) because `AskUserQuestion` rejects >4 options. If fewer than 4 candidates exist, present what you have (min 2).
 
 If the candidate set is empty (everything learned), congratulate the user and stop. Mention they can reset by deleting `~/.claude/skill-try-learned.json`.
 
 ### 3. Present candidates
 
-Use `AskUserQuestion`. Each option's label is the skill id. The description should include both a trimmed one-line summary and the source — e.g. `(figma plugin) Translate code into Figma designs` or `(local) Compact the current conversation into a handoff document`.
+Use `AskUserQuestion` with **2–4 options** (hard tool limit — never pass more). Each option:
+
+- `label` — the skill id (e.g. `handoff`, `figma:figma-use`).
+- `description` — trimmed one-line summary plus source tag, e.g. `(figma plugin) Translate code into Figma designs` or `(local) Compact the current conversation into a handoff document`. Pull the summary from the script's `description` field; trim to ~100 chars.
 
 ### 4. Walk through the chosen skill
 
-Read the chosen skill's full `SKILL.md` and any sibling reference files. Reply with these sections, in order, in markdown:
+Read the chosen skill's full `SKILL.md` from its `path` (which the list script already gave you — no need to re-search). Read any sibling reference files in the same directory if they exist. Reply with these sections, in order, in markdown:
 
-1. **Source** — one line. For local: ``Local skill — `~/.claude/skills/<name>/SKILL.md` ``. For plugin: `From the **<plugin>** plugin (marketplace: <marketplace>)`. Pull `<marketplace>` from the `installed_plugins.json` key.
+1. **Source** — one line. For local: ``Local skill — `<path>/SKILL.md` ``. For plugin: `From the **<plugin>** plugin (marketplace: <marketplace>)`. Both `path` and `marketplace` come from the list script's output.
 2. **What it does** — one or two plain-language sentences. No jargon dump.
 3. **When to use it** — trigger conditions. Pull from the `description` and any inline trigger lists.
 4. **How to invoke** — slash command, trigger phrases, or natural conversation cues. If it takes an argument, show the shape. Note any required prerequisite skills (e.g. figma's MANDATORY-prerequisite skills).
